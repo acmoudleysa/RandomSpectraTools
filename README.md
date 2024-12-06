@@ -1,2 +1,2 @@
 # RandomSpectraTools
-Random tools for spectroscopic data modeling
+Random tools that I created for spectroscopic data modeling

@@ -1,8 +1,17 @@
 """
 NOTE:
-- Model architecture parameters (e.g., HIDDEN_DIMS, DROPOUT_PROB) should be specified as uppercase.
-- Example:
-    {'HIDDEN_DIMS': [128, 64], 'DROPOUT_PROB': 0.3}
+- Model architecture parameters (e.g., HIDDEN_DIMS, DROPOUT_PROB) should
+be specified as uppercase.
+    - Example:
+        {'HIDDEN_DIMS': [128, 64], 'DROPOUT_PROB': 0.3}
+
+- All custom model architectures should inherit both nn.Module and BoilerPlate.
+    - Example:
+        class FCNN(nn.Module, BoilerPlate)
+    - Inside the constructor, nn.Module should be initialized
+    before BoilerPlate exactly as given below (without modification).
+        nn.Module.__init__(self)
+        Boilerplate.__init__(self, num_classes, task=task)
 """
 
 from typing import List, Literal, Optional

@@ -12,7 +12,39 @@ from matplotlib.pyplot import axes
 from sklearn.utils.metaestimators import available_if
 
 
-class MLP(nn.Module):
+class BoilerPlate:
+    def __init__(self, num_classes, task):
+        self.num_classes = num_classes
+        self.task = task
+        if task == "regression":
+            self.loss_fn = nn.MSELoss()
+        elif task == "classification":
+            self.loss_fn = nn.CrossEntropyLoss() if num_classes > 2 else nn.BCEWithLogitsLoss()  # noqa E501
+
+    def compute_loss(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        if ((self.task == "classification" and self.num_classes == 2) or self.task=="regression"):
+            return self.loss_fn(y_pred[:, 0], y_true.float())
+        return self.loss_fn(y_pred, y_true.to(torch.int64))
+
+    def predict(self, y_pred: torch.Tensor):
+        if self.task == "classification":
+            if self.num_classes == 2:
+                return (torch.sigmoid(y_pred[:, 0]) >= 0.5).float()
+            return torch.argmax(y_pred, dim=1)
+        return y_pred.squeeze(1)
+
+    def predict_proba(self, y_pred: torch.Tensor):
+        """
+        Convert raw model output to probabilities (classification only).
+        """
+        if self.task == "classification":
+            if self.num_classes == 2:
+                return torch.sigmoid(y_pred[:, 0])
+            return torch.softmax(y_pred, dim=1)
+        raise ValueError("Probabilities are not applicable for regression.")
+
+
+class MLP(nn.Module, BoilerPlate):
     def __init__(self,
                  input_dim: int,
                  hidden_dims: List = [128, 64, 32],
@@ -20,9 +52,11 @@ class MLP(nn.Module):
                  task: Literal['classification',
                                'regression'] = "classification",
                  dropout_prob: float = 0.2):
-        super().__init__()
-        self.task = task
-        self.num_classes = num_classes
+        # Beware that you need to initialize the nn.Module first
+        nn.Module.__init__(self)
+        BoilerPlate.__init__(self,
+                             num_classes=num_classes,
+                             task=task)
 
         layers = [nn.Linear(input_dim, hidden_dims[0]),
                   nn.BatchNorm1d(hidden_dims[0]),
@@ -42,41 +76,8 @@ class MLP(nn.Module):
 
         self.model = nn.Sequential(*layers)
 
-        if task == "regression":
-            self.loss_fn = nn.MSELoss()
-        elif task == "classification":
-            self.loss_fn = nn.CrossEntropyLoss() if num_classes > 2 else nn.BCEWithLogitsLoss()  # noqa E501
-
     def forward(self, X: torch.Tensor):
         return self.model(X)
-
-    def compute_loss(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        """
-        Compute the loss based on the task.
-        """
-        if ((self.task == "classification" and self.num_classes == 2) or self.task=="regression"):
-            return self.loss_fn(y_pred[:, 0], y_true.float())
-        return self.loss_fn(y_pred, y_true.to(torch.int64))
-
-    def predict(self, y_pred: torch.Tensor):
-        """
-        Convert raw model output to predictions based on the task.
-       """
-        if self.task == "classification":
-            if self.num_classes == 2:
-                return (torch.sigmoid(y_pred[:, 0]) >= 0.5).float()
-            return torch.argmax(y_pred, dim=1)
-        return y_pred.squeeze(1)
-
-    def predict_proba(self, y_pred: torch.Tensor):
-        """
-        Convert raw model output to probabilities (classification only).
-        """
-        if self.task == "classification":
-            if self.num_classes == 2:
-                return torch.sigmoid(y_pred[:, 0])
-            return torch.softmax(y_pred, dim=1)
-        raise ValueError("Probabilities are not applicable for regression.")
 
 
 class MLPEstimator(BaseEstimator):

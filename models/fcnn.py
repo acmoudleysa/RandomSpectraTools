@@ -11,7 +11,7 @@ be specified as uppercase.
     - Inside the constructor, nn.Module should be initialized
     before BoilerPlate exactly as given below (without modification).
         nn.Module.__init__(self)
-        Boilerplate.__init__(self, num_classes, task=task)
+        Boilerplate.__init__(self, num_classes=num_classes, task=task)
 """
 
 from typing import List, Literal, Optional

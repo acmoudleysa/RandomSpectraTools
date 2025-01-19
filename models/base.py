@@ -41,10 +41,10 @@ class PytorchEstimator(BaseEstimator):
     def fit(self,
             X: NDArray,
             y: NDArray,
-            val_data: Tuple[NDArray, NDArray] = None):
+            validation_data: Tuple[NDArray, NDArray] = None):
         X, y = self._cast_torch(X, y, self.device)
-        if val_data is not None:
-            X_val, y_val = self._cast_torch(*val_data, self.device)
+        if validation_data is not None:
+            X_val, y_val = self._cast_torch(*validation_data, self.device)
         num_classes = len(torch.unique(y)) if self.task == "classification" else None
         self.model = self.model_class(input_dim=X.shape[1],
                                       num_classes=num_classes,
@@ -63,7 +63,7 @@ class PytorchEstimator(BaseEstimator):
             loss.backward()
             self.optimizer.step()
 
-            if val_data is not None:
+            if validation_data is not None:
                 self.model.eval()
                 with torch.no_grad():
                     val_pred = self.model(X_val)
@@ -74,6 +74,7 @@ class PytorchEstimator(BaseEstimator):
                     print(f"Epoch [{epoch+1}/{self.epochs}], "
                           f"Training Loss: {loss.item():.4f}, "
                           f"Validation Loss: {val_loss.item():.4f}")
+        return self
 
     def _get_predictions(self, X, return_probabilities=False):
         X = self._cast_torch(X, device=self.device)
@@ -90,6 +91,9 @@ class PytorchEstimator(BaseEstimator):
     def predict_proba(self, X):
         return self._get_predictions(X, return_probabilities=True)
 
+    def fit_predict(self, X, y, validation_data=None):
+        return self.fit(X, y, validation_data=validation_data).predict(X)
+
 
 class BoilerPlate:
     def __init__(self, num_classes, task):
@@ -101,7 +105,7 @@ class BoilerPlate:
             self.loss_fn = nn.CrossEntropyLoss() if num_classes > 2 else nn.BCEWithLogitsLoss()  # noqa E501
 
     def compute_loss(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        if ((self.task == "classification" and self.num_classes == 2) or self.task=="regression"):
+        if (self.task == "classification" and self.num_classes == 2) or self.task=="regression":
             return self.loss_fn(y_pred[:, 0], y_true.float())
         return self.loss_fn(y_pred, y_true.to(torch.int64))
 
@@ -111,3 +115,13 @@ class BoilerPlate:
                 return (torch.sigmoid(y_pred[:, 0]) >= 0.5).float()
             return torch.argmax(y_pred, dim=1)
         return y_pred.squeeze(1)
+
+    def predict_proba(self, y_pred: torch.Tensor):
+        """
+        Convert raw model output to probabilities (classification only).
+        """
+        if self.task == "classification":
+            if self.num_classes == 2:
+                return torch.sigmoid(y_pred[:, 0])
+            return torch.softmax(y_pred, dim=1)
+        raise ValueError("Probabilities are not applicable for regression.")

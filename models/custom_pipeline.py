@@ -1,54 +1,50 @@
-from sklearn.base import BaseEstimator, clone, ClassifierMixin
-from sklearn.utils.metadata_routing import (
-    MetadataRouter,
-    MethodMapping,
-    process_routing
-)
-from sklearn.utils.metaestimators import available_if
+from sklearn.base import TransformerMixin
+import sklearn.pipeline
+from sklearn.utils.metadata_routing import _routing_enabled
+import sklearn
+from sklearn.utils.validation import check_X_y
 
 
-class CustomPipeline(ClassifierMixin, BaseEstimator):
-    def __init__(self, transformers, estimator):
-        self.transformers = transformers
-        self.estimator = estimator
+class CustomPipeline(sklearn.pipeline.Pipeline):
+    def __init__(self, steps):
+        super().__init__(steps)
 
-    def get_metadata_routing(self):
-        router = MetadataRouter(owner=self.__class__.__name__)
-        router.add(
-            estimator=self.estimator,
-            method_mapping=MethodMapping()
-            .add(caller="fit", callee="fit")
-        )
-        return router
+    def fit(self, X, y, validation_data=None, **fit_params):
+        if _routing_enabled():
+            raise ValueError("This version of pipeline doesn't support metadata routing."
+                             " Use sklearn.pipeline.Pipeline instead.")
+        X, y = check_X_y(X, y, allow_nd=True)
+        if validation_data is None:
+            return super().fit(X, y, **fit_params)
 
-    def fit(self, X, y, **fit_params):
-        """Fit the pipeline."""
-        routed_params = process_routing(self, "fit", **fit_params)
-        val_data = routed_params.estimator.fit.get("val_data", None)
+        for name, step in self.steps[:-1]:
+            if isinstance(step, TransformerMixin):
+                print(f"Preprocessing training data with {name}")
+                X = step.fit_transform(X, y)
+            else:
+                return TypeError(f"{name} is not a valid transformer")
 
-        # Sequentially fit and transform data through the transformers
-        self.transformers_ = []
-        if val_data is not None:
-            X_val, y_val = val_data
-        for transformer in self.transformers:
-            transformer_ = clone(transformer).fit(X, y)
-            X = transformer_.transform(X)
-            if val_data is not None:
-                X_val = transformer_.transform(X_val)
-            self.transformers_.append(transformer_)
+        X_val, y_val = check_X_y(*validation_data, allow_nd=True)
+        for name, step in self.steps[:-1]:
+            X_val = step.transform(X_val)
 
-        self.estimator.fit(X, y, val_data=(X_val, y_val) if val_data else None)
+        self.steps[-1][1].fit(X, y,
+                              validation_data=(X_val, y_val),
+                              **fit_params)
+        self._is_fitted = True
         return self
+    
+    def predict_proba(self, X, **predict_proba_params):
+        return super().predict_proba(X, **predict_proba_params)
+    
+    def predict(self, X, **predict_params):
+        return super().predict(X, **predict_params)
+    
+    def fit_predict(self, X, y=None, **fit_params):
+        return super().fit_predict(X, y, **fit_params)
+    
+    def fit_transform(self, X, y=None, **fit_params):
+        return super().fit_transform(X, y, **fit_params)
 
-    def predict(self, X):
-        """Predict using the pipeline."""
-        for transformer in self.transformers_:
-            X = transformer.transform(X)
-        return self.estimator.predict(X)
-
-    @available_if(lambda self: hasattr(self.estimator, "predict_proba"))
-    def predict_proba(self, X):
-        """Predict probabilities if the estimator supports it."""
-        for transformer in self.transformers_:
-            X = transformer.transform(X)
-        return self.estimator.predict_proba(X)
+    def __sklearn_is_fitted__(self):
+        return hasattr(self, "_is_fitted") and self._is_fitted

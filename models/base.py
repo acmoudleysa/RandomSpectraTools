@@ -89,10 +89,13 @@ class PytorchEstimator(BaseEstimator):
         return self._get_predictions(X, return_probabilities=False)
 
     def predict_proba(self, X):
+        if self.task == "regression":
+            raise ValueError("`predict_proba` is not applicable "
+                             " for regression tasks.")
         return self._get_predictions(X, return_probabilities=True)
 
     def fit_predict(self, X, y, validation_data=None):
-        return self.fit(X, y, validation_data=validation_data).predict(X)
+        return self.fit(X, y, validation_data=validation_data).predict(X)     
 
 
 class BoilerPlate:

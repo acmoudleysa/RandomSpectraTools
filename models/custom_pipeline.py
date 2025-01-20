@@ -33,16 +33,16 @@ class CustomPipeline(sklearn.pipeline.Pipeline):
                               **fit_params)
         self._is_fitted = True
         return self
-    
+
     def predict_proba(self, X, **predict_proba_params):
         return super().predict_proba(X, **predict_proba_params)
-    
+
     def predict(self, X, **predict_params):
         return super().predict(X, **predict_params)
-    
+
     def fit_predict(self, X, y=None, **fit_params):
         return super().fit_predict(X, y, **fit_params)
-    
+
     def fit_transform(self, X, y=None, **fit_params):
         return super().fit_transform(X, y, **fit_params)
 

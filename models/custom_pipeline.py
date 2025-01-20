@@ -14,6 +14,7 @@ class CustomPipeline(sklearn.pipeline.Pipeline):
             raise ValueError("This version of pipeline doesn't support metadata routing."
                              " Use sklearn.pipeline.Pipeline instead.")
         X, y = check_X_y(X, y, allow_nd=True)
+        self._is_fitted = True
         if validation_data is None:
             return super().fit(X, y, **fit_params)
 
@@ -31,7 +32,6 @@ class CustomPipeline(sklearn.pipeline.Pipeline):
         self.steps[-1][1].fit(X, y,
                               validation_data=(X_val, y_val),
                               **fit_params)
-        self._is_fitted = True
         return self
 
     def predict_proba(self, X, **predict_proba_params):

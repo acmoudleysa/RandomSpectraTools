@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from typing import Dict, List, Tuple
 from sklearn.exceptions import NotFittedError
+from sklearn.utils.validation import check_is_fitted, validate_data
 
 
 class WavenumberWindowSelector2D(BaseEstimator, TransformerMixin):
@@ -97,10 +98,6 @@ class WavenumberWindowSelector1D(BaseEstimator, TransformerMixin):
             raise NotFittedError("This WavenumberWindowSelector1D "
                                  "is not fitted yet!")
 
-from sklearn.base import TransformerMixin
-from sklearn.utils.validation import check_is_fitted, validate_data
-
-
 class PDS(TransformerMixin):
     """
     Transfer model with Piecewise Direct standardization based on PLS.
@@ -122,7 +119,8 @@ class PDS(TransformerMixin):
         num_wavelengths = X_master.shape[1]
 
         if X_master.shape != X_slave.shape:
-            raise ValueError("The number of samples and number of wavelengths should be equal.")
+            raise ValueError("The number of samples and number of wavelengths for "
+                             "both arrays should be equal.")
         
         self.transfer_matrix = np.zeros((num_wavelengths, num_wavelengths))
 
@@ -144,7 +142,7 @@ class PDS(TransformerMixin):
             chosen_num_components = np.min([len(wv_range_selected), self.n_components_max])
 
             pls = PLSRegression(chosen_num_components, scale=False).fit(X, y)
-            # intercept is zero since it's already mean-centered. Hence, we only need coefficients
+            # intercept is zero since it's already mean-centered.
             self.transfer_matrix[wv_range_selected, i] = pls.coef_
         return self
 

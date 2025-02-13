@@ -77,7 +77,7 @@ class WavenumberWindowSelector1D(BaseEstimator, TransformerMixin):
                                           dtype=int)
         self._is_fitted = True
         return self
-
+    
     def _get_selected_indices(self) -> Tuple[int, int]:
         start_idx = np.argmin(np.abs(self.wavenumbers_ - self.columns_range[0]))
         end_idx = np.argmin(np.abs(self.wavenumbers_ - self.columns_range[1])) + 1
@@ -87,6 +87,7 @@ class WavenumberWindowSelector1D(BaseEstimator, TransformerMixin):
         self._check_is_fitted()
         return X[:, self.selected_indices]
 
+    @property
     def get_selected_wavenumbers(self) -> np.ndarray:
         self._check_is_fitted()
         return self.wavenumbers_[self.selected_indices]
@@ -95,3 +96,68 @@ class WavenumberWindowSelector1D(BaseEstimator, TransformerMixin):
         if not hasattr(self, "_is_fitted"):
             raise NotFittedError("This WavenumberWindowSelector1D "
                                  "is not fitted yet!")
+
+from sklearn.base import TransformerMixin
+from sklearn.utils.validation import check_is_fitted, validate_data
+
+
+class PDS(TransformerMixin):
+    """
+    Transfer model with Piecewise Direct standardization based on PLS.
+    PLS can be replaced with Ridge/LR/PCR
+    Ref: https://www.sciencedirect.com/science/article/pii/0169743995000747
+    """
+    def __init__(self, n_components_max: int=2, window_size: int = 5):
+        self.n_components_max = n_components_max
+        self.window_size = window_size
+
+    def fit(self, X_master, X_slave) -> None:
+        X_master = validate_data(
+            self, X_master, y="no_validation", ensure_2d=True, reset=True, dtype=np.float64
+        )
+        X_slave = validate_data(
+            self, X_slave, y="no_validation", ensure_2d=True, reset=True, dtype=np.float64
+        )
+
+        num_wavelengths = X_master.shape[1]
+
+        if X_master.shape != X_slave.shape:
+            raise ValueError("The number of samples and number of wavelengths should be equal.")
+        
+        self.transfer_matrix = np.zeros((num_wavelengths, num_wavelengths))
+
+        self.mean_master = X_master.mean(axis=0)
+        self.mean_slave = X_slave.mean(axis=0)
+
+        X_master_centered = X_master - self.mean_master
+        X_slave_centered = X_slave - self.mean_slave
+
+        for i in range(num_wavelengths):
+            # we are predicting the wavelengths of master instrument (one by one)
+            y = X_master_centered[:, i]
+            # The X is going to be spectra from the slave instrument
+            lb = np.max([0, i-self.window_size])
+            ub = np.min([i+self.window_size, num_wavelengths-1])
+            wv_range_selected = np.arange(lb, ub + 1)
+            X = X_slave_centered[:, wv_range_selected]
+
+            chosen_num_components = np.min([len(wv_range_selected), self.n_components_max])
+
+            pls = PLSRegression(chosen_num_components, scale=False).fit(X, y)
+            # intercept is zero since it's already mean-centered. Hence, we only need coefficients
+            self.transfer_matrix[wv_range_selected, i] = pls.coef_
+        return self
+
+    def transform(self, X_slave) -> np.ndarray:
+        """
+        You can calculate the offset in the fit step and modify this step as follows:
+        self.offset = self.mean_master - self.mean_slave@self.transfer_matrix
+        In the transform step:
+        X_slave@self.transfer_matrix + self.offset
+        It's exactly the same if you expand:
+        (X_test_slave - X_mean_slave)*W + X_master_mean
+        X_test_slave*W + X_master_mean - X_mean_slave*W
+        """
+        check_is_fitted(self, "transfer_matrix")
+        X_slaved_centered = X_slave - self.mean_slave
+        return X_slaved_centered@self.transfer_matrix + self.mean_master

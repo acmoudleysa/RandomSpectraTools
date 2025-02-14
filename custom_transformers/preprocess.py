@@ -143,7 +143,7 @@ class PDS(TransformerMixin):
 
             pls = PLSRegression(chosen_num_components, scale=False).fit(X, y)
             # intercept is zero since it's already mean-centered.
-            self.transfer_matrix[wv_range_selected, i] = pls.coef_
+            self.transfer_matrix[wv_range_selected, i] = pls.coef_[0]
         return self
 
     def transform(self, X_slave) -> np.ndarray:

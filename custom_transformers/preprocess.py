@@ -143,7 +143,7 @@ class PDS(TransformerMixin):
 
             pls = PLSRegression(chosen_num_components, scale=False).fit(X, y)
             # intercept is zero since it's already mean-centered.
-            self.transfer_matrix[wv_range_selected, i] = pls.coef_[0]
+            self.transfer_matrix[wv_range_selected, i] = pls.coef_
         return self
 
     def transform(self, X_slave) -> np.ndarray:
@@ -156,6 +156,53 @@ class PDS(TransformerMixin):
         (X_test_slave - X_mean_slave)*W + X_master_mean
         X_test_slave*W + X_master_mean - X_mean_slave*W
         """
+        check_is_fitted(self, "transfer_matrix")
+        X_slaved_centered = X_slave - self.mean_slave
+        return X_slaved_centered@self.transfer_matrix + self.mean_master
+
+class PDS_TruncatedSVD(TransformerMixin):
+    """
+    Transfer model with Piecewise Direct standardization based on TruncatedSVD.
+    """
+    def __init__(self, n_components_max: int=2, window_size: int = 5):
+        self.n_components_max = n_components_max
+        self.window_size = window_size
+
+    def fit(self, X_master, X_slave) -> None:
+        X_master = validate_data(
+            self, X_master, y="no_validation", ensure_2d=True, reset=True, dtype=np.float64
+        )
+        X_slave = validate_data(
+            self, X_slave, y="no_validation", ensure_2d=True, reset=True, dtype=np.float64
+        )
+
+        num_wavelengths = X_master.shape[1]
+
+        if X_master.shape != X_slave.shape:
+            raise ValueError("The number of samples and number of wavelengths should be equal.")
+        
+        self.transfer_matrix = np.zeros((num_wavelengths, num_wavelengths))
+
+        self.mean_master = X_master.mean(axis=0)
+        self.mean_slave = X_slave.mean(axis=0)
+
+        X_master_centered = X_master - self.mean_master
+        X_slave_centered = X_slave - self.mean_slave
+
+        for i in range(num_wavelengths):
+            y = X_master_centered[:, i]
+            lb = np.max([0, i-self.window_size])
+            ub = np.min([i+self.window_size, num_wavelengths-1])
+            wv_range_selected = np.arange(lb, ub + 1)
+            X = X_slave_centered[:, wv_range_selected]
+
+            chosen_num_components = np.min([len(wv_range_selected), self.n_components_max])
+            U, S, Vt = np.linalg.svd(X, full_matrices=True)
+            F = Vt.T[:, :chosen_num_components]@np.linalg.inv(np.diag(S[:3]))@U[:, :chosen_num_components].T@y
+            self.transfer_matrix[wv_range_selected, i] = F
+        return self
+
+    def transform(self, X_slave) -> np.ndarray:
         check_is_fitted(self, "transfer_matrix")
         X_slaved_centered = X_slave - self.mean_slave
         return X_slaved_centered@self.transfer_matrix + self.mean_master

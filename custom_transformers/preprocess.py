@@ -198,7 +198,7 @@ class PDS_TruncatedSVD(TransformerMixin):
 
             chosen_num_components = np.min([len(wv_range_selected), self.n_components_max])
             U, S, Vt = np.linalg.svd(X, full_matrices=True)
-            F = Vt.T[:, :chosen_num_components]@np.linalg.inv(np.diag(S[:3]))@U[:, :chosen_num_components].T@y
+            F = Vt.T[:, :chosen_num_components]@np.linalg.inv(np.diag(S[:chosen_num_components]))@U[:, :chosen_num_components].T@y
             self.transfer_matrix[wv_range_selected, i] = F
         return self
 
